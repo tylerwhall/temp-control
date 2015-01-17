@@ -3,6 +3,22 @@
 #include <signal.h>
 #include <stdint.h>
 
+enum Mode {
+    INITIAL_WARM,
+    MAINTAIN,
+};
+
+#define FIRST_TEMP 170
+#define SECOND_TEMP 110
+#define MAINTAIN_SECS (180 * 60)
+#define TEMP_HYSTERESIS 3
+
+static enum Mode mode;
+static int target_temp;
+static int current_temp;
+static int heater_on;
+static int maintain_time;
+
 static void clock_setup(void)
 {
     BCSCTL3 |= LFXT1S_2;
@@ -18,32 +34,73 @@ static void start_timer(void)
 }
 
 __attribute__((interrupt(TIMER0_A0_VECTOR)))
-void nop(void)
+void timer(void)
 {
     P1OUT ^= 0x01;
+    ADC10CTL0 |= ENC | ADC10SC;
 }
 
-static uint16_t adc_val = 0;;
-static int adc_ran = 0;
+static void set_heater (int on)
+{
+    // XXX: toggle output for heater
+    heater_on = on;
+    if (on)
+        P1OUT |= (1 << 6);
+    else
+        P1OUT &= ~(1 << 6);
+}
+
+static int adc_to_temp(uint16_t val)
+{
+    return val / 7 + 57;
+}
+
+void control (void)
+{
+    switch (mode) {
+        case INITIAL_WARM:
+            if (current_temp > target_temp) {
+                target_temp = SECOND_TEMP;
+                mode = MAINTAIN;
+            }
+            break;
+
+        case MAINTAIN:
+            maintain_time++;
+            if (maintain_time > MAINTAIN_SECS)
+                target_temp = 0;
+            break;
+    }
+
+    if (current_temp > target_temp + TEMP_HYSTERESIS)
+        set_heater(0);
+    if (current_temp < target_temp - TEMP_HYSTERESIS)
+        set_heater(1);
+}
 
 __attribute__((interrupt(ADC10_VECTOR)))
 void adc_irq(void)
 {
-    adc_val = ADC10MEM;
-    adc_ran = 1;
+    uint16_t adc_val = ADC10MEM;
+    current_temp = adc_to_temp(adc_val);
+    control();
 }
 
 static void setup_adc(void)
 {
-    ADC10CTL1 = INCH_5 | ADC10DIV_3;
-    ADC10CTL0 = SREF_0 | ADC10SHT_3 | ADC10ON | ADC10IE;
+    ADC10CTL1 = INCH_5 | ADC10DIV_7;
+    ADC10CTL0 = SREF_1 | REF2_5V | REFON | ADC10SHT_3 | ADC10ON | ADC10IE;
     ADC10AE0 = BIT5;
-    //P1SEL |= BIT5;
 }
 
 int main(void)
 {
     int i;
+
+    mode = INITIAL_WARM;
+    target_temp = FIRST_TEMP;
+    maintain_time = 0;
+    set_heater(1);
 
     WDTCTL = WDTPW | WDTHOLD;
 
@@ -56,15 +113,7 @@ int main(void)
 
     _enable_interrupts();
 
-    ADC10CTL0 |= ENC | ADC10SC;
     for (;;) {
-        _disable_interrupts();
-        if (TAR < (TACCR0 >> 1)) {
-            P1OUT |= (1 << 6);
-        } else {
-            P1OUT &= ~(1 << 6);
-        }
-        _enable_interrupts();
-        //LPM0;
+        LPM3;
     }
 }
