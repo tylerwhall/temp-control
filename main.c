@@ -36,23 +36,22 @@ static void start_timer(void)
 __attribute__((interrupt(TIMER0_A0_VECTOR)))
 void timer(void)
 {
-    P1OUT ^= 0x01;
+    P1OUT ^= (1 << 6);
     ADC10CTL0 |= ENC | ADC10SC;
 }
 
 static void set_heater (int on)
 {
-    // XXX: toggle output for heater
     heater_on = on;
     if (on)
-        P1OUT |= (1 << 6);
+        P1OUT |= (1 << 0);
     else
-        P1OUT &= ~(1 << 6);
+        P1OUT &= ~(1 << 0);
 }
 
 static int adc_to_temp(uint16_t val)
 {
-    return val / 7 + 57;
+    return 251 - (val / 7);
 }
 
 void control (void)
