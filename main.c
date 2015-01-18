@@ -11,7 +11,7 @@ enum Mode {
 #define FIRST_TEMP 170
 #define SECOND_TEMP 110
 #define MAINTAIN_SECS (180 * 60)
-#define TEMP_HYSTERESIS 3
+#define TEMP_HYSTERESIS 1
 
 static enum Mode mode;
 static int target_temp;
@@ -51,7 +51,7 @@ static void set_heater (int on)
 
 static int adc_to_temp(uint16_t val)
 {
-    return 251 - (val / 7);
+    return 270 - (val / 6);
 }
 
 void control (void)
