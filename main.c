@@ -18,6 +18,7 @@ static int target_temp;
 static int current_temp;
 static int heater_on;
 static int maintain_time;
+static int jiffies;
 
 static void clock_setup(void)
 {
@@ -36,7 +37,7 @@ static void start_timer(void)
 __attribute__((interrupt(TIMER0_A0_VECTOR)))
 void timer(void)
 {
-    P1OUT ^= (1 << 6);
+    jiffies++;
     ADC10CTL0 |= ENC | ADC10SC;
 }
 
@@ -52,6 +53,20 @@ static void set_heater (int on)
 static int adc_to_temp(uint16_t val)
 {
     return 260 - (val / 6);
+}
+
+static void set_led (void)
+{
+    if (heater_on)
+        P1OUT |= (1 << 6);
+    else {
+        if (mode == MAINTAIN) {
+            if (jiffies % 2 == 0)
+                P1OUT ^= (1 << 6);
+        }  else {
+            P1OUT ^= (1 << 6);
+        }
+    }
 }
 
 void control (void)
@@ -76,6 +91,8 @@ void control (void)
         set_heater(0);
     if (current_temp < target_temp - TEMP_HYSTERESIS)
         set_heater(1);
+
+    set_led();
 }
 
 __attribute__((interrupt(ADC10_VECTOR)))
@@ -100,6 +117,7 @@ int main(void)
     mode = INITIAL_WARM;
     target_temp = FIRST_TEMP;
     maintain_time = 0;
+    jiffies = 0;
     set_heater(1);
 
     WDTCTL = WDTPW | WDTHOLD;
